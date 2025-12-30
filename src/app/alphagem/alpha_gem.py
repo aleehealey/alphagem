@@ -123,9 +123,15 @@ class AlphaGem(nn.Module):
     def _encode_model_player(self, public_state: interface.GamePublicState, private_state: interface.PlayerPrivateState):
         """Encode the model's player state information."""
         inputs = []
-        
-        # Get the model's public state
-        model_player = public_state.me
+
+        # Fallback: lookup by player_id
+        model_player = None
+        for p in public_state.players:
+            if p.player_id == private_state.player_id:
+                model_player = p
+                break
+        if model_player is None:
+            raise ValueError(f"Player with id {private_state.player_id} not found in public players.")
         
         # 1. Revealed info cards - 5 ints (Ruby, Sapphire, Emerald, Amethyst, Diamond)
         revealed_info_counts = self._count_gems_by_suit(private_state.info_cards_revealed)
@@ -239,7 +245,6 @@ class AlphaGem(nn.Module):
             inputs.extend(opponent_inputs)
 
         return np.array(inputs, dtype=np.float32)
-
 
     def decode_output(self, output):
         raise NotImplementedError("decode_output not implemented")
