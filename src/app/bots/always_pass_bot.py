@@ -1,5 +1,5 @@
 from __future__ import annotations
-from competition.interface import *
+from app.competition.interface import *
 
 # -----------------------------
 # Bot 1: AlwaysPass

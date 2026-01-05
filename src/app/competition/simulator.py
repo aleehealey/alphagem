@@ -6,10 +6,10 @@ import random
 import statistics
 from dataclasses import dataclass
 from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
-from competition.interface import *
-from competition.game import *
+from app.competition.interface import *
+from app.competition.game import *
 from collections import defaultdict
-from competition.audit import audit_game, print_audit_summary, ActionAudit, BotAudit
+from app.competition.audit import audit_game, print_audit_summary, ActionAudit, BotAudit
 
 # Assumes your interface + engine are importable / in-scope:
 # from pocketrocks_interface import (

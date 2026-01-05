@@ -1,5 +1,5 @@
-from competition.interface import *
-from bots.helpers import _current_item, _best_trinket_bonus_if_win, _bundle_value, _affordable
+from app.competition.interface import *
+from app.bots.helpers import _current_item, _best_trinket_bonus_if_win, _bundle_value, _affordable
 
 # -----------------------------
 # Bot 3: GreedyTrinket

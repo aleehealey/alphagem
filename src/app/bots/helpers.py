@@ -1,5 +1,5 @@
-from competition.interface import *
-from competition.simulator import BotEntry
+from app.competition.interface import *
+from app.competition.simulator import BotEntry
 
 # -----------------------------
 # Small helpers for bots

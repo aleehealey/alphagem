@@ -4,7 +4,7 @@ from collections import defaultdict, Counter
 from dataclasses import dataclass
 from typing import Dict, List, Tuple, Optional
 
-from competition.interface import ActionType, GamePublicState, AuctionResult
+from app.competition.interface import ActionType, GamePublicState, AuctionResult
 
 
 @dataclass

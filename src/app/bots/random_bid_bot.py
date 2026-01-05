@@ -1,4 +1,4 @@
-from competition.interface import *
+from app.competition.interface import *
 import random
 from time import time
 

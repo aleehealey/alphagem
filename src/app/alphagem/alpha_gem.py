@@ -5,25 +5,41 @@ import torch.optim as optim
 from app.competition import interface
 
 class AlphaGem(nn.Module):
-    def __init__(self):
+    def __init__(self, num_players: int = 3):
         super().__init__()
+
+        if num_players < 3:
+            num_players = 3
+        if num_players > 5:
+            num_players = 5
+        self.num_players = num_players
+
+        self.num_inputs = 30 + 19 + (self.num_players - 1) * 15
+
         self.model = nn.Sequential(
-            nn.Linear(10, 100),
+            nn.Linear(self.num_inputs, 160),
             nn.ReLU(),
-            nn.Linear(100, 10),
+            nn.Linear(160, 320),
             nn.ReLU(),
-            nn.Linear(10, 1)
+            nn.Linear(320, 320),
+            nn.ReLU(),
+            nn.Linear(320, 160)
         )
         # 2 heads
-        # one on the value of the item being auctioned
-        # one on the card of ours being revealed
+        self.value_head = nn.Linear(160, 20) # one on the value of the item being auctioned
+        self.revealed_card_head = nn.Linear(160, 5) # one on the card of ours being revealed
         
         # State tracking
         self.prev_observation = None
         self.player_order_map = None  # Maps actual player_id to relative position (self is 0)
     
-    def forward(self, x):
-        return self.model(x)
+    def forward(self, game_observation: interface.GameObservation):
+        encoded_input = self.encode_input(game_observation)
+        tensor_input = torch.FloatTensor(encoded_input).unsqueeze(0)
+        x = self.model(tensor_input)
+        value_output = self.value_head(x)
+        revealed_card_output = self.revealed_card_head(x)
+        return value_output, revealed_card_output
 
     def _encode_suit(self, suit):
         """Encode gem suit to number: 0=None, 1=Ruby, 2=Sapphire, 3=Emerald, 4=Amethyst, 5=Diamond"""
@@ -246,5 +262,17 @@ class AlphaGem(nn.Module):
 
         return np.array(inputs, dtype=np.float32)
 
-    def decode_output(self, output):
-        raise NotImplementedError("decode_output not implemented")
+    def decode_value_output(self, value_tensor):
+        value_probs = value_tensor.squeeze(0).softmax(dim=0)
+        value = value_probs.argmax()
+        value_confidence = value_probs.max()
+        return value, value_confidence
+
+    def decode_revealed_card_output(self, revealed_card_tensor):
+        revealed_card_probs = revealed_card_tensor.squeeze(0).softmax(dim=0)
+
+        card_prefereces = [(idx + 1, prob) for idx, prob in enumerate(revealed_card_probs)]
+        card_prefereces.sort(key=lambda x: x[1], reverse=True)
+        return card_prefereces
+
+

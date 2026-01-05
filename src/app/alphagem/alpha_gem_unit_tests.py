@@ -995,7 +995,6 @@ class TestAlphaGemEncoding(unittest.TestCase):
         self.assertEqual(float(result2[23]), 2)
         self.assertEqual(float(result3[23]), 0)
 
-
 if __name__ == '__main__':
     unittest.main()
 

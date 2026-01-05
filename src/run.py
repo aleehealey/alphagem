@@ -1,14 +1,14 @@
-from competition.simulator import run_pocketrocks_simulation, print_pocketrocks_report, BotEntry
+from app.competition.simulator import run_pocketrocks_simulation, print_pocketrocks_report, BotEntry
 from time import time
 
 # -----------------------------
 # Convenience: factories for the simulator
 # -----------------------------
 
-from bots.always_pass_bot import AlwaysPassBot
-from bots.random_bid_bot import RandomBidBot
-from bots.greedy_trinket_bot import GreedyTrinketBot
-from bots.value_trader_bot import ValueTraderBot
+from app.bots.always_pass_bot import AlwaysPassBot
+from app.bots.random_bid_bot import RandomBidBot
+from app.bots.greedy_trinket_bot import GreedyTrinketBot
+from app.bots.value_trader_bot import ValueTraderBot
 
 def make_bot_entries_for_sim() -> list["BotEntry"]:
     return [

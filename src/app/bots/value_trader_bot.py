@@ -1,5 +1,5 @@
-from competition.interface import *
-from bots.helpers import _current_item, legal_max_bid, _affordable, _bundle_value, _best_trinket_bonus_if_win
+from app.competition.interface import *
+from app.bots.helpers import _current_item, legal_max_bid, _affordable, _bundle_value, _best_trinket_bonus_if_win
 import math
 # -----------------------------
 # Bot 4: ValueTrader
