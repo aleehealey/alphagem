@@ -1,12 +1,22 @@
 """
-Interactive game play script - Play against a trained AlphaGem bot.
+Interactive game play script - Play against a list of bots (heuristic or model bots).
 
 Usage:
-    python play.py <model_path> [--num-players N] [--seed SEED]
+    python self_play.py --bots <bot1> <bot2> ... [--seed SEED]
 
-Example:
-    python play.py models/best_model.pth
-    python play.py models/best_model.pth --num-players 3 --seed 42
+Bot types:
+    - Model bots: model:<path> (e.g., model:src/models/model_final_1767150966.pth)
+    - HeuristicBot: heuristic:<percentage> (e.g., heuristic:30, heuristic:40)
+    - ValueTraderBot: valuetrader:<risk> (e.g., valuetrader:30, valuetrader:90)
+    - ValueHeuristicBot: valueheuristic:<risk> (e.g., valueheuristic:30, valueheuristic:90)
+    - AlwaysPass: alwayspass
+    - RandomBid: randombid
+    - GreedyTrinket: greedytrinket
+
+Examples:
+    python self_play.py --bots model:src/models/model_final_1767150966.pth heuristic:30
+    python self_play.py --bots heuristic:30 heuristic:40 valuetrader:90
+    python self_play.py --bots model:src/models/model_final_1767150966.pth heuristic:30 valueheuristic:90 --seed 42
 """
 
 import sys
@@ -18,6 +28,12 @@ from app.competition.game import PocketRocketsEngine, EngineConfig
 from app.alphagem.alpha_gem import AlphaGem
 from app.bots.alpha_gem_bot import AlphaGemBot
 from app.bots.human_bot import HumanBot
+from app.bots.heuristic_bot import HeuristicBot
+from app.bots.value_trader_bot import ValueTraderBot
+from app.bots.value_heuristic_bot import ValueHeuristicBot
+from app.bots.always_pass_bot import AlwaysPassBot
+from app.bots.random_bid_bot import RandomBidBot
+from app.bots.greedy_trinket_bot import GreedyTrinketBot
 from app.competition.simulator import default_value_chart, default_trinkets
 
 
@@ -362,42 +378,119 @@ def load_model(model_path: str, num_players: int = 3) -> AlphaGem:
         sys.exit(1)
 
 
+def create_bot_from_config(config: str, num_players: int = 3) -> PocketRocketsBot:
+    """
+    Create a bot from a configuration string.
+    
+    Supported formats:
+    - model:<path> - Load an AlphaGem model
+    - heuristic:<percentage> - HeuristicBot with bid_percentage
+    - valuetrader:<risk> - ValueTraderBot with risk (0-100, converted to 0.0-1.0)
+    - valueheuristic:<risk> - ValueHeuristicBot with risk (0-100, converted to 0.0-1.0)
+    - alwayspass - AlwaysPassBot
+    - randombid - RandomBidBot
+    - greedytrinket - GreedyTrinketBot
+    """
+    config = config.strip().lower()
+    
+    if config.startswith("model:"):
+        model_path = config[6:].strip()
+        if not model_path:
+            raise ValueError("Model path cannot be empty")
+        model = load_model(model_path, num_players=num_players)
+        return AlphaGemBot(model, name=f"AlphaGem({model_path.split('/')[-1]})")
+    
+    elif config.startswith("heuristic:"):
+        try:
+            percentage = float(config[10:].strip())
+            if not (0 <= percentage <= 100):
+                raise ValueError("Percentage must be between 0 and 100")
+            return HeuristicBot(bid_percentage=percentage / 100.0, name=f"HeuristicBot{int(percentage)}")
+        except ValueError as e:
+            raise ValueError(f"Invalid heuristic percentage: {e}")
+    
+    elif config.startswith("valuetrader:"):
+        try:
+            risk = float(config[12:].strip())
+            if not (0 <= risk <= 100):
+                raise ValueError("Risk must be between 0 and 100")
+            return ValueTraderBot(risk=risk / 100.0)
+        except ValueError as e:
+            raise ValueError(f"Invalid valuetrader risk: {e}")
+    
+    elif config.startswith("valueheuristic:"):
+        try:
+            risk = float(config[15:].strip())
+            if not (0 <= risk <= 100):
+                raise ValueError("Risk must be between 0 and 100")
+            return ValueHeuristicBot(risk=risk / 100.0)
+        except ValueError as e:
+            raise ValueError(f"Invalid valueheuristic risk: {e}")
+    
+    elif config == "alwayspass":
+        return AlwaysPassBot()
+    
+    elif config == "randombid":
+        return RandomBidBot()
+    
+    elif config == "greedytrinket":
+        return GreedyTrinketBot()
+    
+    else:
+        raise ValueError(f"Unknown bot configuration: {config}. Use format: model:<path>, heuristic:<%>, valuetrader:<risk>, valueheuristic:<risk>, alwayspass, randombid, or greedytrinket")
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Play PocketRockets against a trained AlphaGem bot")
-    parser.add_argument("model_path", type=str, help="Path to the model file (.pth)")
-    parser.add_argument("--num-players", type=int, default=3, choices=[2, 3, 4, 5],
-                        help="Number of players (default: 2, meaning you + 1 bot)")
+    parser = argparse.ArgumentParser(
+        description="Play PocketRockets against a list of bots (heuristic or model bots)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+    Examples:
+    python self_play.py --bots model:src/models/model_final_1767150966.pth heuristic:30
+    python self_play.py --bots heuristic:30 heuristic:40 valuetrader:90
+    python self_play.py --bots model:src/models/model_final_1767150966.pth heuristic:30 valueheuristic:90 --seed 42
+            """
+    )
+    parser.add_argument("--bots", nargs="+", required=True,
+                        help="List of bot configurations. See help for formats.")
     parser.add_argument("--seed", type=int, default=None, help="Random seed for the game")
     
     args = parser.parse_args()
     
-    # Validate model path
-    import os
-    if not os.path.exists(args.model_path):
-        print(f"❌ Model file not found: {args.model_path}")
-        sys.exit(1)
+    # Validate bot configurations and create bots
+    bots = [HumanBot()]  # Human is always player 0
     
-    # Determine number of players
-    num_players = args.num_players
-    if num_players < 2:
-        num_players = 2
+    num_players = len(args.bots) + 1  # +1 for human
     
-    # Load model
-    model = load_model(args.model_path, num_players=num_players)
+    if num_players < 3:
+        print("⚠️  Warning: Minimum 3 players required. Adding AlwaysPass bots...")
+        while num_players < 3:
+            bots.append(AlwaysPassBot())
+            num_players += 1
     
-    # Create bots
-    human_bot = HumanBot()
-    bot_bot = AlphaGemBot(model, name="AlphaGem")
+    if num_players > 5:
+        print(f"⚠️  Warning: Maximum 5 players. Limiting to first 4 bots.")
+        args.bots = args.bots[:4]
+        num_players = 5
     
-    bots = [human_bot, bot_bot]
+    # Create opponent bots
+    print("\n🤖 Creating opponent bots...")
+    for i, bot_config in enumerate(args.bots):
+        try:
+            bot = create_bot_from_config(bot_config, num_players=num_players)
+            bots.append(bot)
+            print(f"   ✓ Bot {i+1}: {bot.bot_name} ({bot_config})")
+        except Exception as e:
+            print(f"   ❌ Error creating bot from '{bot_config}': {e}")
+            sys.exit(1)
     
-    # Add dummy bots if needed to reach minimum 3 players
-    from app.bots.always_pass_bot import AlwaysPassBot
+    # Ensure we have at least 3 players total
     while len(bots) < 3:
         bots.append(AlwaysPassBot())
     
-    # Limit to requested number
-    bots = bots[:num_players]
+    # Limit to 5 players max
+    bots = bots[:5]
+    num_players = len(bots)
     
     # Set up game
     seed = args.seed if args.seed is not None else None
@@ -410,10 +503,12 @@ def main():
     trinkets = default_trinkets(seed=seed)
     
     print(f"\n{'='*80}")
-    print("POCKETROCKETS - HUMAN vs BOT")
+    print("POCKETROCKETS - HUMAN vs BOTS")
     print(f"{'='*80}")
-    print(f"Model: {args.model_path}")
     print(f"Players: {num_players}")
+    print(f"   👤 You (Human)")
+    for i, bot in enumerate(bots[1:], 1):
+        print(f"   🤖 {bot.bot_name}")
     print(f"Seed: {seed}")
     print(f"{'='*80}\n")
     
