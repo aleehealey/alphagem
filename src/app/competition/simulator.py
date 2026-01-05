@@ -404,10 +404,19 @@ def print_pocketrocks_report(result: SimulationResult) -> None:
     for row in table[1:]:
         print_row(row)
 
-    # Overall sanity
+    # Overall statistics
     total_games = len(result.game_logs)
     print(f"\nTotal games: {total_games}")
-    if total_games:
+    if total_games and rows:
+        # Most common winner (by raw count)
         winners = [g["winner"] for g in result.game_logs]
         most_common = max(set(winners), key=winners.count)
         print(f"Most common winner: {most_common} ({winners.count(most_common)}/{total_games})")
+        
+        # Highest win percentage winner
+        highest_win_pct = max(rows, key=lambda r: r["win%"])
+        print(f"Highest win%: {highest_win_pct['name']} ({highest_win_pct['win%']*100:.1f}%, {highest_win_pct['wins']}/{highest_win_pct['games']} games)")
+        
+        # Highest average score winner
+        highest_avg_score = max(rows, key=lambda r: r["avg_score"])
+        print(f"Highest avg score: {highest_avg_score['name']} ({highest_avg_score['avg_score']:.2f} points)")

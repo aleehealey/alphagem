@@ -2,6 +2,7 @@ from __future__ import annotations
 from app.competition.interface import *
 from app.bots.helpers import _current_item, _affordable
 from typing import Dict
+import math
 
 
 class HeuristicBot(PocketRocketsBot):
@@ -123,7 +124,7 @@ class HeuristicBot(PocketRocketsBot):
         """
         base_value = self._get_base_gem_value(obs, suit)
         trinket_bonus = self._calculate_trinket_bonus_value(obs, suit)
-        return base_value + trinket_bonus
+        return base_value # + trinket_bonus
     
     def get_bid(self, obs: GameObservation) -> Bid:
         """
@@ -132,9 +133,36 @@ class HeuristicBot(PocketRocketsBot):
         kind = obs.context.action.kind
         max_bid = legal_max_bid(obs)
         
-        # Avoid loans and investments (heuristic: focus on gems)
-        if kind in (ActionType.LOAN_10, ActionType.LOAN_20, ActionType.INVESTMENT_5, ActionType.INVESTMENT_10):
-            return Bid(0)
+        # Estimate game stage for small behavior tweaks
+        # (upcoming not counted in pile count, so total remaining gems is upcoming + pile)
+        remaining_gems = len(obs.context.upcoming_gems) + obs.context.biddable_pile_count
+        late = remaining_gems <= 6
+        
+        if kind in (ActionType.INVESTMENT_5, ActionType.INVESTMENT_10):
+            payout = 5 if kind == ActionType.INVESTMENT_5 else 10
+
+            # Investment net gain at end is payout (locked returns), so bid should be <= payout,
+            # but we discount early game because locking cash can lose gem opportunities.
+            discount = 0.9 if late else 0.65
+            bid = int(math.floor(discount * payout))
+            return Bid(_affordable(bid, obs))
+
+        if kind in (ActionType.LOAN_10, ActionType.LOAN_20):
+            principal = 10 if kind == ActionType.LOAN_10 else 20
+
+            # Loan gives principal now, but you repay principal later; bid is a pure cost.
+            # Only worth it if: (a) bid is tiny, and (b) you are cash constrained now.
+            cash = obs.me.cash
+            constrained = cash <= 3
+            if not constrained and not late:
+                return Bid(0)
+
+            # If constrained, you might pay 1–2 to gain liquidity.
+            # If late, sometimes worth 1 to buy a last gem.
+            bid = 2 if constrained else 1
+            # Never bid more than a small fraction of principal
+            bid = min(bid, max(0, principal // 10))
+            return Bid(_affordable(bid, obs))
         
         # Get the gems being auctioned
         cards, _ = _current_item(obs)
@@ -153,26 +181,46 @@ class HeuristicBot(PocketRocketsBot):
         trinket_immediate_bonus = _best_trinket_bonus_if_win(obs, cards)
         total_value += trinket_immediate_bonus
         
-        # Bid the specified percentage of the calculated value
-        bid = int(max(0, round(total_value * self.bid_percentage)))
+        # Small premium late game (values are more known + fewer turns to recover)
+        mult = self.bid_percentage * (1.05 if late else 1.0)
+        
+        # Bid the specified percentage of the calculated value (with late game premium)
+        bid = int(max(0, round(total_value * mult)))
         return Bid(_affordable(bid, obs))
     
     def choose_info_to_reveal(self, obs: GameObservation, result: AuctionResult) -> str:
         """
-        Reveal the suit that we have the least of in our unrevealed cards.
-        This helps hide our strong suits.
+        Slightly more nuanced: reveal a suit that (given public reveals) would
+        move market beliefs *toward neutrality* rather than swinging prices.
+        We approximate by revealing the suit with the smallest absolute deviation
+        between:
+          our private count for that suit
+        and
+          the public expected count for that suit among remaining hidden info.
         """
         unrevealed = list(obs.private.info_cards_unrevealed)
         if not unrevealed:
-            # Fallback: return first revealed card if no unrevealed
-            return obs.private.info_cards_revealed[0].id if obs.private.info_cards_revealed else ""
-        
-        # Count unrevealed cards by suit
-        counts: Dict[Suit, int] = {s: 0 for s in Suit}
+            return obs.private.info_cards_revealed[0].id
+
+        # Compute public known counts and remaining hidden
+        total_info = 0
+        known: Dict[Suit, int] = {s: 0 for s in Suit}
+        for p in obs.public.players:
+            total_info += p.unrevealed_info_count + len(p.revealed_info)
+            for c in p.revealed_info:
+                known[c.suit] += 1
+        remaining = max(0, total_info - sum(known.values()))
+        exp_each = remaining / len(Suit) if remaining else 0.0
+
+        # Our private counts
+        my_counts: Dict[Suit, int] = {s: 0 for s in Suit}
         for c in unrevealed:
-            counts[c.suit] += 1
-        
-        # Reveal the suit with the lowest count (to keep strong suits hidden)
-        best = min(unrevealed, key=lambda c: (counts[c.suit], c.id))
+            my_counts[c.suit] += 1
+
+        # Choose card whose suit is closest to "neutral" (exp_each) to minimize info impact
+        best = min(
+            unrevealed,
+            key=lambda c: (abs(my_counts[c.suit] - exp_each), my_counts[c.suit], c.id),
+        )
         return best.id
 
