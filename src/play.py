@@ -471,7 +471,7 @@ def main():
     if num_players > 5:
         print(f"⚠️  Warning: Maximum 5 players. Limiting to first 4 bots.")
         args.bots = args.bots[:4]
-        num_players = 5
+        num_players = 5      
     
     # Create opponent bots
     print("\n🤖 Creating opponent bots...")
